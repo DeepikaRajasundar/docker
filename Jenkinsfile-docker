@@ -63,7 +63,7 @@ pipeline{
 		
 		stage("deploy_docker"){
 				steps{
-					sh "docker run -d --name hotstar -p 3001:3000 apatranobis59/hotstar:latest"
+					sh "docker run -d --name hotstar -p 4001:4000 apatranobis59/hotstar:latest"
 				}
 		}
         
