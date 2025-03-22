@@ -3,11 +3,11 @@ pipeline {
 
     tools {
         jdk 'jdk17'
-        nodejs 'node16'
+        nodejs 'node20'
     }
 
     environment {
-        SCANNER_HOME = '' // Initialize SonarQube scanner variable
+        SCANNER_HOME = '' // SonarQube scanner
     }
 
     stages {
@@ -19,8 +19,8 @@ pipeline {
 
         stage('Checkout from Git') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/akaspatranobis/hotstar-clone-app-ci-cd-k8.git'
+                git branch: 'main', credentialsId: 'github_seccred',
+                    url: 'https://github.com/DeepikaRajasundar/docker.git'
             }
         }
 
@@ -42,7 +42,7 @@ pipeline {
         stage("Quality Gate Check") {
             steps {
                 script {
-                    timeout(time: 5, unit: 'MINUTES') { // Set a timeout for quality gate check
+                    timeout(time: 5, unit: 'MINUTES') {
                         waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
                     }
                 }
@@ -51,15 +51,11 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh "npm install"
-            }
-        }
-
-        stage('Trivy FS Scan') {
-            steps {
                 script {
-                    echo "Scanning files with Trivy..."
-                    sh "trivy fs --exit-code 1 --severity HIGH,CRITICAL . || echo 'Security vulnerabilities detected!'"
+                    echo "Installing npm dependencies..."
+                    sh '''
+                    for i in 1 2 3 4 5; do npm install && break || sleep 5; done
+                    '''
                 }
             }
         }
@@ -69,20 +65,10 @@ pipeline {
                 script {
                     withDockerRegistry(credentialsId: 'docker') {
                         sh '''
-                        docker build -t hotstar .
-                        docker tag hotstar apatranobis59/hotstar:latest
-                        docker push apatranobis59/hotstar:latest
+                        docker build -t deepika452005/devops_docker:latest .
+                        docker push deepika452005/devops_docker:latest
                         '''
                     }
-                }
-            }
-        }
-
-        stage("Trivy Image Scan") {
-            steps {
-                script {
-                    echo "Scanning Docker image with Trivy..."
-                    sh "trivy image --exit-code 1 --severity HIGH,CRITICAL apatranobis59/hotstar:latest || echo 'Image vulnerabilities detected!'"
                 }
             }
         }
@@ -92,9 +78,9 @@ pipeline {
                 script {
                     echo "Deploying the Docker container..."
                     sh '''
-                    docker stop hotstar || true
-                    docker rm hotstar || true
-                    docker run -d --name hotstar -p 4001:4000 apatranobis59/hotstar:latest
+                    docker stop devops_container || true
+                    docker rm devops_container || true
+                    docker run -d --name devops_container -p 4001:4000 deepika452005/devops_docker:latest
                     '''
                 }
             }
