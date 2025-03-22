@@ -4,19 +4,21 @@ FROM node:alpine
 # Set working directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json first to leverage Docker cache
-COPY package.json package-lock.json ./
+# Copy package.json and package-lock.json before copying other files
+COPY package.json package-lock.json /app/
 
-# Clear npm cache
-RUN npm cache clean --force
+# Set DNS to prevent npm EAI_AGAIN errors
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
-# Install dependencies
-RUN npm install
+# Run npm install with retry logic
+RUN npm cache clean --force && \
+    for i in 1 2 3 4 5; do npm install && break || sleep 5; done
 
-# Copy the entire project to the working directory
-COPY . .
+# Copy the full project files
+COPY . /app/
 
-# Expose the port your app runs on
+# Expose port 4000
 EXPOSE 4000
 
 # Start the application
