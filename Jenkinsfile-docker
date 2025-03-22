@@ -1,72 +1,103 @@
-pipeline{
+pipeline {
     agent any
-    tools{
+
+    tools {
         jdk 'jdk17'
         nodejs 'node16'
     }
+
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = '' // Initialize SonarQube scanner variable
     }
+
     stages {
-        stage('clean workspace'){
-            steps{
+        stage('Clean Workspace') {
+            steps {
                 cleanWs()
             }
         }
-        stage('Checkout from Git'){
-            steps{
-                git branch: 'main', url: 'https://github.com/akaspatranobis/hotstar-clone-app-ci-cd-k8.git'
+
+        stage('Checkout from Git') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/akaspatranobis/hotstar-clone-app-ci-cd-k8.git'
             }
         }
-        stage("Sonarqube Analysis "){
-            steps{
-                withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Hotstar \
-                    -Dsonar.projectKey=Hotstar'''
-                }
-            }
-        }
-        stage("quality gate"){
-           steps {
+
+        stage("SonarQube Analysis") {
+            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                    SCANNER_HOME = tool 'sonar-scanner'
+                }
+                withSonarQubeEnv('sonar-server') {
+                    sh '''
+                    $SCANNER_HOME/bin/sonar-scanner \
+                    -Dsonar.projectName=Hotstar \
+                    -Dsonar.projectKey=Hotstar
+                    '''
                 }
             }
         }
+
+        stage("Quality Gate Check") {
+            steps {
+                script {
+                    timeout(time: 5, unit: 'MINUTES') { // Set a timeout for quality gate check
+                        waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
+                    }
+                }
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
                 sh "npm install"
             }
         }
-        
-        stage('TRIVY FS SCAN') {
+
+        stage('Trivy FS Scan') {
             steps {
-                sh "trivy fs . > trivyfs.txt"
+                script {
+                    echo "Scanning files with Trivy..."
+                    sh "trivy fs --exit-code 1 --severity HIGH,CRITICAL . || echo 'Security vulnerabilities detected!'"
+                }
             }
         }
-        stage("Docker Build & Push"){
-            steps{
-                script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
-                       sh "docker build -t hotstar ."
-                       sh "docker tag hotstar apatranobis59/hotstar:latest "
-                       sh "docker push apatranobis59/hotstar:latest"
+
+        stage("Docker Build & Push") {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker') {
+                        sh '''
+                        docker build -t hotstar .
+                        docker tag hotstar apatranobis59/hotstar:latest
+                        docker push apatranobis59/hotstar:latest
+                        '''
                     }
                 }
             }
         }
-        stage("TRIVY"){
-            steps{
-                sh "trivy image apatranobis59/hotstar:latest > trivyimage.txt" 
+
+        stage("Trivy Image Scan") {
+            steps {
+                script {
+                    echo "Scanning Docker image with Trivy..."
+                    sh "trivy image --exit-code 1 --severity HIGH,CRITICAL apatranobis59/hotstar:latest || echo 'Image vulnerabilities detected!'"
+                }
             }
         }
-		
-		stage("deploy_docker"){
-				steps{
-					sh "docker run -d --name hotstar -p 4001:4000 apatranobis59/hotstar:latest"
-				}
-		}
-        
-        
+
+        stage("Deploy Docker Container") {
+            steps {
+                script {
+                    echo "Deploying the Docker container..."
+                    sh '''
+                    docker stop hotstar || true
+                    docker rm hotstar || true
+                    docker run -d --name hotstar -p 4001:4000 apatranobis59/hotstar:latest
+                    '''
+                }
+            }
+        }
     }
-} 
+}
